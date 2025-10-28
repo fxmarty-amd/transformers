@@ -103,6 +103,11 @@ def get_torch_version() -> str:
     _, torch_version = _is_package_available("torch", return_version=True)
     return torch_version
 
+@lru_cache
+def get_quark_version() -> str:
+    _, quark_version = _is_package_available("quark", return_version=True)
+    return quark_version
+
 
 @lru_cache
 def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
@@ -880,6 +885,12 @@ def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool =
     else:
         return version.parse(hub_version) >= version.parse(library_version)
 
+@lru_cache
+def is_quark_greater_or_equal(library_version: str) -> bool:
+    if not _is_package_available("quark"):
+        return False
+
+    return version.parse(get_quark_version()) >= version.parse(library_version)
 
 @lru_cache
 def is_quanto_greater(library_version: str, accept_dev: bool = False) -> bool:

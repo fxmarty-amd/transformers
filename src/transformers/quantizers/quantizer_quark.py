@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from typing import TYPE_CHECKING
+from transformers.utils.import_utils import is_quark_greater_or_equal
 
 from .base import HfQuantizer
 
@@ -38,6 +39,7 @@ CHECKPOINT_KEYS = {
     "output_zero_point": "output_quantizer.zero_point",
 }
 
+CHECKPOINT_KEYS_REVERSE = {value: key for key, value in CHECKPOINT_KEYS.items()}
 
 class QuarkHfQuantizer(HfQuantizer):
     """
@@ -77,6 +79,23 @@ class QuarkHfQuantizer(HfQuantizer):
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         return True
+
+    def update_expected_keys(self, model: "PreTrainedModel", expected_keys: list[str], checkpoint_keys: list[str]):
+        if is_quark_greater_or_equal("0.11"):
+            new_expected_keys = []
+            for key in expected_keys:
+                # e.g. `weight_quantizer.scale`.
+                postfix = ".".join(key.split(".")[-2:])
+
+                if postfix in CHECKPOINT_KEYS_REVERSE:
+                    new_key = key.replace(postfix, CHECKPOINT_KEYS_REVERSE[postfix])
+                    new_expected_keys.append(new_key)
+                else:
+                    new_expected_keys.append(key)
+                            
+            return new_expected_keys
+        else:
+            return expected_keys
 
     def create_quantized_param(self, model, param, param_name, param_device, **kwargs):
         from ..modeling_utils import _load_parameter_into_model
