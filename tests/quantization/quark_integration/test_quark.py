@@ -25,13 +25,61 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.import_utils import is_quark_available
-
+import pytest
+from tempfile import TemporaryDirectory
+import gc
 
 if is_torch_available():
     import torch
 
 if is_quark_available():
     from quark.torch.export.nn.modules.qparamslinear import QParamsLinear
+    from quark.torch import import_model_from_safetensors
+
+
+def test_load():
+    model_id = "amd/Llama-3.1-8B-Instruct-FP8-KV"
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+    prompt = "Today I am in Paris - do you have suggestions as to what I could do?"
+
+    inp = tokenizer(prompt, return_tensors="pt").to(torch_device)
+
+    for device in ["meta", torch_device]:
+        config = AutoConfig.from_pretrained(model_id)
+        with torch.device(device):
+            model = AutoModelForCausalLM.from_config(config)
+        
+        with TemporaryDirectory() as tmpdir:
+            q_model = import_model_from_safetensors(model, model_dir=tmpdir, multi_device=False)
+            for _, param in q_model.named_parameters():
+                assert param.device != "meta"
+            for _, param in q_model.named_buffers():
+                assert param.device != "meta"
+
+            q_model = q_model.eval()
+
+            # scaled_mm has exclusive tests, only naive mode is tested here.
+            if device == "meta":
+                q_model = q_model.to(torch_device)
+
+            with torch.no_grad():
+                ref_outputs = q_model(**inp)
+    
+    del q_model
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()
+
+    model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+
+    with torch.no_grad():
+        tf_outputs = model(**inp)
+    
+
+    print("ref_outputs", ref_outputs)
+
 
 
 @require_quark
